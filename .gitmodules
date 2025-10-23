@@ -1,6 +1,3 @@
-[submodule "flcd-lab-fork"]
-	path = flcd-lab-fork
-	url = https://github.com/tiutcristian/flcd-lab-fork.git
 [submodule "flcd-lab-2025-tiutcristian"]
 	path = flcd-lab-2025-tiutcristian
 	url = https://github.com/cs-ubbcluj-ro/flcd-lab-2025-tiutcristian.git
