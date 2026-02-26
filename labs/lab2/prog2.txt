@@ -1,0 +1,9 @@
+Take as input some logs, sanitize them, replace all errors with warnings, uppercase them, swap all spaces with underscores and save the processed text in a new textfile.
+
+LOAD "input.txt"
+TRIM
+REPLACE "ERROR" WITH "WARN"
+UPPERCASE
+SPLIT BY " "
+JOIN WITH "_"
+SAVE "processed.txt"

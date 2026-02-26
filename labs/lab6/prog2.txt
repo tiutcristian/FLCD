@@ -1,0 +1,7 @@
+in_file = "input.txt"
+LOAD in_file
+TRIM
+REPLACE "-" WITH "_"
+UPPERCASE
+out_file = "processed.txt"
+SAVE out_file

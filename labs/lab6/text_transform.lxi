@@ -1,0 +1,58 @@
+%{
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include "minidsl.tab.h"
+%}
+
+/* ---- flex options ---- */
+%option noyywrap
+%option yylineno
+
+/* ---- definitions ---- */
+LETTER      [a-zA-Z]
+DIGIT       [0-9]
+ID          {LETTER}({LETTER}|{DIGIT}|_)*
+STRING      \"[^\"\n]*\"
+WS          [ \t\r]+
+
+/* Keywords */
+KEYWORD     LOAD|REPLACE|WITH|SPLIT|BY|JOIN|TRIM|UPPERCASE|LOWERCASE|SAVE
+
+%%
+
+{WS}
+
+\n
+
+{KEYWORD}               {
+                          if (strcmp(yytext,"LOAD")==0)       return LOAD;
+                          if (strcmp(yytext,"REPLACE")==0)    return REPLACE;
+                          if (strcmp(yytext,"WITH")==0)       return WITH;
+                          if (strcmp(yytext,"SPLIT")==0)      return SPLIT;
+                          if (strcmp(yytext,"BY")==0)         return BY;
+                          if (strcmp(yytext,"JOIN")==0)       return JOIN;
+                          if (strcmp(yytext,"TRIM")==0)       return TRIM;
+                          if (strcmp(yytext,"UPPERCASE")==0)  return UPPERCASE;
+                          if (strcmp(yytext,"LOWERCASE")==0)  return LOWERCASE;
+                          if (strcmp(yytext,"SAVE")==0)       return SAVE;
+                        }
+
+{ID}                    {
+                            yylval.str = strdup(yytext);
+                            return ID;
+                        }
+
+{STRING}                {
+                            yylval.str = strdup(yytext);
+                            return STRING;
+                        }
+
+"="                     { return ASSIGN; }
+
+.                       {
+                          fprintf(stderr, "Lexical error (line %d): unrecognized char: %s\n",
+                                  yylineno, yytext);
+                        }
+
+%%

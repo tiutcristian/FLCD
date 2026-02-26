@@ -1,0 +1,19 @@
+States 0..2:
+  q0 = S [START]
+  q1 = B
+  q2 = FINAL
+
+Accepting states:
+  q2
+
+Transitions:
+  q0 --'"'--> { q1 }
+  q1 --l--> { q1 }
+  q1 --d--> { q1 }
+  q1 --'.'--> { q1 }
+  q1 --'_'--> { q1 }
+  q1 --'-'--> { q1 }
+  q1 --';'--> { q1 }
+  q1 --' '--> { q1 }
+  q1 --'/'--> { q1 }
+  q1 --'"'--> { q2 }

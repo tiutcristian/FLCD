@@ -1,0 +1,19 @@
+This DSL is a domain-specific language for cleaning and transforming text in a clear, declarative, and procedural way. 
+It is designed to operate on text streams or files, keeping the syntax minimal while allowing powerful transformations.
+
+The DSL lets you load text from an input file (LOAD "file.txt") and then apply a sequence of transformations such as 
+replacing substrings, trimming whitespace, changing case, splitting and joining text, or applying formatting. 
+These transformations are written one per line, making the scripts easy to read and predictable.
+
+For example, you can write REPLACE "foo" WITH "bar" to rename occurrences of a substring, 
+UPPERCASE to normalize everything to capital letters, or SPLIT BY "," followed by JOIN WITH ";" to reformat CSV-like data. 
+The syntax avoids complexity, focusing on clarity and direct manipulation of text.
+
+The DSL also provides commands for common preprocessing tasks:
+-	Removing unwanted characters (TRIM).
+-	Normalizing data for case-insensitive comparison (LOWERCASE, UPPERCASE).
+-	Reformatting tokens by splitting and rejoining with different delimiters.
+-	Saving the final output to a file with SAVE "output.txt".
+
+This makes it especially useful for data cleaning, ETL pipelines, and quick scripting tasks, 
+where you need to fix inconsistent text formats, standardize values, or prepare text before loading into another system.

@@ -1,0 +1,359 @@
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define ST_BUCKETS 211 // prime-sized hash table
+#define MAX_LEXEME 1024
+#define PIF_INIT_CAP 1024
+
+typedef enum {
+  T_LOAD = 256, 
+  T_REPLACE, 
+  T_WITH, 
+  T_SPLIT, 
+  T_BY, 
+  T_JOIN, 
+  T_TRIM, 
+  T_UPPERCASE, 
+  T_LOWERCASE, 
+  T_SAVE,
+  T_ASSIGN,
+  T_ID, 
+  T_STRING
+} TokenCode;
+
+/* ------------ Symbol Table with separate chaining ------------ */
+typedef struct STNode {
+  char *lexeme;
+  struct STNode *next;
+  int bucket_index;
+  int order_index;
+} STNode;
+
+typedef struct {
+  STNode *buckets[ST_BUCKETS];
+  int bucket_sizes[ST_BUCKETS];
+} SymbolTable;
+
+static unsigned st_hash(const char *s) {
+  /* djb2 */
+  unsigned long h = 5381; int c;
+  while ((c = *s++)) h = ((h << 5) + h) + (unsigned)c;
+  return (unsigned)(h % ST_BUCKETS);
+}
+
+static void st_init(SymbolTable *st) {
+  memset(st, 0, sizeof(*st));
+}
+
+static STNode* st_lookup(SymbolTable *st, const char *lexeme) {
+  unsigned b = st_hash(lexeme);
+  for (STNode *p = st->buckets[b]; p; p = p->next)
+    if (strcmp(p->lexeme, lexeme) == 0) return p;
+  return NULL;
+}
+
+/* Returns inserted OR existing node. */
+static STNode* st_insert(SymbolTable *st, const char *lexeme) {
+  STNode *hit = st_lookup(st, lexeme);
+  if (hit) return hit;
+  unsigned b = st_hash(lexeme);
+  STNode *n = (STNode*)malloc(sizeof(STNode));
+  n->lexeme = (char*)malloc(strlen(lexeme)+1);
+  strcpy(n->lexeme, lexeme);
+  n->bucket_index = (int)b;
+  n->order_index  = st->bucket_sizes[b];
+  n->next = st->buckets[b];
+  st->buckets[b] = n;
+  st->bucket_sizes[b]++;
+  return n;
+}
+
+static void st_dump(SymbolTable *st, const char *path) {
+  FILE *f = fopen(path, "w");
+  if (!f) return;
+  for (int b = 0; b < ST_BUCKETS; ++b) {
+    if (!st->buckets[b]) continue;
+    fprintf(f, "Bucket %d:\n", b);
+    /* display in reverse insertion because we push-front; for deterministic order, collect first */
+    /* quick simple two-pass: count, then copy */
+    int cnt = 0; for (STNode *p = st->buckets[b]; p; p = p->next) cnt++;
+    STNode **arr = (STNode**)malloc(cnt * sizeof(STNode*));
+    int i = 0; for (STNode *p = st->buckets[b]; p; p = p->next) arr[i++] = p;
+    for (int j = cnt-1; j >= 0; --j) {
+      fprintf(f, "  (%d, %d) -> %s\n", b, arr[j]->order_index, arr[j]->lexeme);
+    }
+    free(arr);
+  }
+  fclose(f);
+}
+
+/* ------------ Program Internal Form (dynamic array) ------------ */
+typedef struct {
+  TokenCode code;
+  int st_bucket;
+  int st_index;
+} PIFEntry;
+
+typedef struct {
+  PIFEntry *v;
+  int size, cap;
+} PIF;
+
+static void pif_init(PIF *p) {
+  p->size = 0; 
+  p->cap = PIF_INIT_CAP;
+  p->v = (PIFEntry*)malloc(p->cap * sizeof(PIFEntry));
+}
+
+static void pif_push(PIF *p, TokenCode code, int bucket, int index) {
+  if (p->size == p->cap) {
+    p->cap *= 2;
+    p->v = (PIFEntry*)realloc(p->v, p->cap * sizeof(PIFEntry));
+  }
+  p->v[p->size].code = code;
+  p->v[p->size].st_bucket = bucket;
+  p->v[p->size].st_index  = index;
+  p->size++;
+}
+
+static void pif_dump(PIF *p, const char *path) {
+  FILE *f = fopen(path, "w");
+  if (!f) return;
+  for (int i = 0; i < p->size; ++i) {
+    if (p->v[i].st_bucket < 0)
+      fprintf(f, "(%d, -)\n", (int)p->v[i].code);
+    else
+      fprintf(f, "(%d, (%d,%d))\n", (int)p->v[i].code, p->v[i].st_bucket, p->v[i].st_index);
+  }
+  fclose(f);
+}
+
+/* ------------ error collection ------------ */
+typedef struct {
+  int line;
+  char what[MAX_LEXEME];
+} LexErr;
+
+static LexErr *g_err = NULL;
+static int g_err_sz = 0, g_err_cap = 0;
+
+static void err_push(int line, const char *what) {
+  if (g_err_sz == g_err_cap) {
+    g_err_cap = g_err_cap ? g_err_cap * 2 : 64;
+    g_err = (LexErr*)realloc(g_err, g_err_cap * sizeof(LexErr));
+  }
+  g_err[g_err_sz].line = line;
+  snprintf(g_err[g_err_sz].what, sizeof(g_err[g_err_sz].what), "%s", what);
+  g_err_sz++;
+}
+
+static void err_dump(const char *path) {
+  FILE *f = fopen(path, "w");
+  if (!f) return;
+  if (g_err_sz == 0) {
+    fprintf(f, "No lexical errors.\n");
+  } else {
+    for (int i = 0; i < g_err_sz; ++i)
+      fprintf(f, "Line %d: %s\n", g_err[i].line, g_err[i].what);
+  }
+  fclose(f);
+}
+
+/* ------------ globals ------------ */
+static SymbolTable ST;
+static PIF Pif;
+
+static TokenCode keyword_code(const char *s) {
+  if (strcmp(s,"LOAD")==0) return T_LOAD;
+  if (strcmp(s,"REPLACE")==0) return T_REPLACE;
+  if (strcmp(s,"WITH")==0) return T_WITH;
+  if (strcmp(s,"SPLIT")==0) return T_SPLIT;
+  if (strcmp(s,"BY")==0) return T_BY;
+  if (strcmp(s,"JOIN")==0) return T_JOIN;
+  if (strcmp(s,"TRIM")==0) return T_TRIM;
+  if (strcmp(s,"UPPERCASE")==0) return T_UPPERCASE;
+  if (strcmp(s,"LOWERCASE")==0) return T_LOWERCASE;
+  if (strcmp(s,"SAVE")==0) return T_SAVE;
+  return 0;
+}
+
+/* ------------ FA / Regular Grammar simulation ------------ */
+/* Identifier FA:
+ * States:
+ *  q0 (start) --letter--> q1
+ *  q1 (accept) --(letter|digit|_)--> q1
+ */
+static int is_identifier_fa(const char *s) {
+  enum { ID_Q0, ID_Q1, ID_DEAD } st = ID_Q0;
+  for (int i = 0; s[i] != '\0' && st != ID_DEAD; ++i) {
+    char c = s[i];
+    switch (st) {
+      case ID_Q0:
+        if (isalpha((unsigned char)c))
+          st = ID_Q1;
+        else
+          st = ID_DEAD;
+        break;
+      case ID_Q1:
+        if (isalnum((unsigned char)c) || c == '_')
+          st = ID_Q1;
+        else
+          st = ID_DEAD;
+        break;
+      default:
+        st = ID_DEAD;
+        break;
+    }
+  }
+  return (st == ID_Q1);
+}
+
+/* Constant (string) FA:
+ * We accept: " <any chars except " or newline>* "
+ * States:
+ *  S0 (start) --"--> S1
+ *  S1 (content/empty allowed)
+ *     --"--> S2 (accept, end)
+ *     --(not " and not newline)--> S1
+ */
+static int is_string_fa(const char *s) {
+  enum { C_S0, C_S1, C_S2, C_DEAD } st = C_S0;
+  int i = 0;
+
+  while (s[i] != '\0' && st != C_DEAD) {
+    char c = s[i];
+    switch (st) {
+      case C_S0:
+        if (c == '"')
+          st = C_S1;
+        else
+          st = C_DEAD;
+        break;
+
+      case C_S1:
+        if (c == '"')
+          st = C_S2;          /* seen closing quote */
+        else if (c == '\n')
+          st = C_DEAD;        /* newline inside string not allowed */
+        else
+          st = C_S1;          /* stay in content */
+        break;
+
+      case C_S2:
+        /* Anything after closing quote is invalid. */
+        st = C_DEAD;
+        break;
+
+      default:
+        st = C_DEAD;
+        break;
+    }
+    i++;
+  }
+
+  /* Valid only if we ended exactly in C_S2 (closed quote at end of lexeme). */
+  return (st == C_S2);
+}
+
+static void add_id(const char *lex) {
+  STNode *n = st_insert(&ST, lex);
+  pif_push(&Pif, T_ID, n->bucket_index, n->order_index);
+}
+
+static void add_string(const char *lex) {
+  STNode *n = st_insert(&ST, lex);
+  pif_push(&Pif, T_STRING, n->bucket_index, n->order_index);
+}
+
+%}
+
+/* ------------ options for lex ------------ */
+%option noyywrap
+%option yylineno
+
+/* ------------ def section ------------ */
+LETTER      [a-zA-Z]
+DIGIT       [0-9]
+ID          [a-z][a-z0-9\_]*
+
+STRING_CONTENT ([^"\n])
+STRING      \"({STRING_CONTENT})*\"
+
+KEYWORD     LOAD|REPLACE|WITH|SPLIT|BY|JOIN|TRIM|UPPERCASE|LOWERCASE|SAVE
+
+%%
+
+[ \t\r]+                 /* skip horizontal whitespace */
+
+\n                       /* yylineno auto-increments; rule present to avoid . */
+
+{KEYWORD}                { TokenCode c = keyword_code(yytext);
+                           pif_push(&Pif, c, -1, -1);
+                         }
+
+{ID}                     { if (is_identifier_fa(yytext)) {
+                             add_id(yytext);
+                           } else {
+                             char buf[256];
+                             snprintf(buf, sizeof(buf),
+                                      "Invalid identifier (FA reject): %s", yytext);
+                             err_push(yylineno, buf);
+                           } }
+
+{STRING}                 { if (is_string_fa(yytext)) {
+                             add_string(yytext);
+                           } else {
+                             char buf[256];
+                             snprintf(buf, sizeof(buf),
+                                      "Invalid string (FA reject): %s", yytext);
+                             err_push(yylineno, buf);
+                           } }
+
+"="                      { pif_push(&Pif, T_ASSIGN, -1, -1); }
+
+.                        { char buf[256];
+                           snprintf(buf, sizeof(buf), "Unrecognized character: '%s'", yytext);
+                           err_push(yylineno, buf);
+                         }
+
+%%
+
+/* ---------- user code ---------- */
+int main(int argc, char **argv) {
+  const char *in_path  = NULL;
+  const char *pif_out  = "pif.txt";
+  const char *st_out   = "st.txt";
+  const char *err_out  = "lex_errors.txt";
+
+  if (argc >= 2) in_path = argv[1];
+  if (argc >= 3) pif_out = argv[2];
+  if (argc >= 4) st_out = argv[3];
+  if (argc >= 5) err_out = argv[4];
+
+  if (in_path) {
+    yyin = fopen(in_path, "r");
+    if (!yyin) { fprintf(stderr, "Cannot open input: %s\n", in_path); return 1; }
+  } else {
+    yyin = stdin;
+  }
+
+  st_init(&ST);
+  pif_init(&Pif);
+
+  yylex();
+
+  pif_dump(&Pif, pif_out);
+  st_dump(&ST,  st_out);
+  err_dump(err_out);
+
+  if (g_err_sz == 0) {
+    printf("Lexing complete. PIF -> %s, ST -> %s. No lexical errors.\n", pif_out, st_out);
+    return 0;
+  } else {
+    printf("Lexing complete with %d lexical error(s). See %s\n", g_err_sz, err_out);
+    return 2;
+  }
+}

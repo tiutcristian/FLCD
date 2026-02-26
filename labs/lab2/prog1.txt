@@ -1,0 +1,8 @@
+Take as input a CSV file, replace al commas with semicolons and save the result in a textfile.
+
+in_file = "data.csv"
+LOAD in_file
+SPLIT BY ","
+JOIN WITH ";"
+out_file = "converted_data.txt"
+SAVE out_file

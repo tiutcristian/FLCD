@@ -1,0 +1,34 @@
+<program> ::= <statement> | <statement> <separator> <program>
+<separator> ::= "\n"
+
+<statement> ::= <assignment_statement>
+              | <load_statement>
+              | <replace_statement>
+              | <split_statement>
+              | <join_statement>
+              | <trim_statement>
+              | <uppercase_statement>
+              | <lowercase_statement>
+              | <save_statement>
+
+<assignment_statement> ::= <id> "=" <string>
+<load_statement> ::= "LOAD" <id>
+<replace_statement> ::= "REPLACE" <string> "WITH" <string>
+<split_statement> ::= "SPLIT" "BY" <string>
+<join_statement> ::= "JOIN" "WITH" <string>
+<trim_statement> ::= "TRIM"
+<uppercase_statement> ::= "UPPERCASE"
+<lowercase_statement> ::= "LOWERCASE"
+<save_statement> ::= "SAVE" <id>
+
+<string> ::= '"' <string_characters> '"'
+<string_characters> ::= <string_character> <string_characters> | epsilon
+<string_character> ::= <letter> | <digit> | "." | "_" | "-" | "," | ";" | " " | "/"
+
+<id> ::= <letter> <id_characters>
+<id_characters> ::= <id_character> <id_characters> | epsilon
+<id_character> ::= <letter> | <digit> | "_"
+
+
+<letter> ::= "a" | … | "z" | "A" | … | "Z"
+<digit> ::= "0" | … | "9"

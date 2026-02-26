@@ -1,0 +1,14 @@
+States 0..2:
+  q0 = S [START]
+  q1 = A
+  q2 = FINAL
+
+Accepting states:
+  q1
+  q2
+
+Transitions:
+  q0 --l--> { q1 }
+  q1 --l--> { q1 }
+  q1 --d--> { q1 }
+  q1 --'_'--> { q1 }

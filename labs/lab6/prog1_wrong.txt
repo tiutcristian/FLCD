@@ -1,0 +1,6 @@
+in_file = "data.csv"
+LOAD "data.csv"
+SPLIT BY ","
+JOIN WITH ";"
+out_file = "converted_data.txt"
+SAVE out_file

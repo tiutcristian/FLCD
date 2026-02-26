@@ -1,0 +1,10 @@
+# l = <LETTER>
+# d = <DIGIT>
+# EPS = epsilon
+#
+NONTERMINALS: S,A
+TERMINALS: l,d,'_'
+START: S
+PRODUCTIONS:
+S -> l A
+A -> l A | d A | '_' A | EPS

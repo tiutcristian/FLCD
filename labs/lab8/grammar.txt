@@ -1,0 +1,61 @@
+# NonTerminals:
+program
+statement_list
+statement
+load_stmt
+replace_stmt
+split_stmt
+join_stmt
+trim_stmt
+uppercase_stmt
+lowercase_stmt
+save_stmt
+assignment_stmt
+---
+
+# Terminals:
+LOAD
+REPLACE
+WITH
+SPLIT
+BY
+JOIN
+TRIM
+UPPERCASE
+LOWERCASE
+SAVE
+ASSIGN
+ID
+STRING
+---
+
+# StartSymbol:
+program
+---
+
+# Productions:
+program -> statement_list
+
+statement_list -> statement statement_list
+statement_list -> epsilon
+
+statement -> load_stmt
+statement -> replace_stmt
+statement -> split_stmt
+statement -> join_stmt
+statement -> trim_stmt
+statement -> uppercase_stmt
+statement -> lowercase_stmt
+statement -> save_stmt
+statement -> assignment_stmt
+
+load_stmt -> LOAD ID
+replace_stmt -> REPLACE STRING WITH STRING
+split_stmt -> SPLIT BY STRING
+join_stmt -> JOIN WITH STRING
+trim_stmt -> TRIM
+uppercase_stmt -> UPPERCASE
+lowercase_stmt -> LOWERCASE
+save_stmt -> SAVE ID
+assignment_stmt -> ID ASSIGN STRING
+---
